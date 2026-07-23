@@ -1,0 +1,43 @@
+name: Refresh season data
+
+on:
+  # Tuesday 09:00 UTC — after weekend results and Monday-night games have settled.
+  schedule:
+    - cron: "0 9 * * 2"
+  # Adds a "Run workflow" button on the Actions tab for on-demand refreshes.
+  workflow_dispatch:
+
+# Lets the job commit the regenerated data files back to the repo.
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch seasons from CollegeFootballData
+        env:
+          CFBD_KEY: ${{ secrets.CFBD_KEY }}
+        # Edit this list as seasons come and go. Past seasons are kept because
+        # they are the fixtures the tiebreaker engine gets validated against.
+        run: node scripts/fetch-season.mjs 2024 2025 2026
+
+      - name: Commit any changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --staged --quiet; then
+            echo "No changes — scores and schedules are already current."
+          else
+            git commit -m "Refresh season data ($(date -u +%Y-%m-%d))"
+            git push
+          fi
