@@ -1,26 +1,26 @@
 {
-  "generated": "2026-07-23T03:25:23.484Z",
+  "generated": "2026-07-23T03:28:59.715Z",
   "seasons": [
     {
       "year": 2026,
       "teams": 138,
       "games": 888,
       "final": 0,
-      "championships": 1
+      "championships": 0
     },
     {
       "year": 2025,
       "teams": 136,
       "games": 888,
       "final": 888,
-      "championships": 10
+      "championships": 9
     },
     {
       "year": 2024,
       "teams": 134,
       "games": 874,
       "final": 873,
-      "championships": 10
+      "championships": 9
     }
   ]
 }
