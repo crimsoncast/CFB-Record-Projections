@@ -134,6 +134,7 @@ tbody tr:hover{background:#1A2C33}
   padding:1px 5px;border-radius:2px;vertical-align:middle;margin-left:5px}
 .tag.ok{background:#1F3B38;color:var(--final)}
 .tag.stop{background:#2E211C;color:var(--flag)}
+.tag.tie{background:#22303A;color:var(--dim)}
 tr.contest td{background:#241C1A}
 
 details.trace{max-width:820px;margin:8px 0 0;font-size:12px}
@@ -478,30 +479,56 @@ function verdict(cname, ctx, res, hasRules){
 }
 
 function standingsTable(ctx, res){
+  /* Order the table by the ENGINE's ranking, not by win percentage. The
+     procedure has already separated teams level on record; sorting the table
+     independently discards that work and lists them alphabetically, which
+     misrepresents the standings the tool just computed. */
+  var seat = {}, tierOf = {}, seq = 0, tid = 0;
+  (res.tiers || []).forEach(function(tier){
+    tid++;
+    tier.forEach(function(t){ seat[t] = seq++; tierOf[t] = tid; });
+  });
+  function seatOf(t){ return seat[t] === undefined ? 1e6 : seat[t]; }
+
   var inGame = {}, contested = {};
   res.participants.forEach(function(t){ inGame[t] = true; });
   if (res.blocked) (res.blocked.contested || []).forEach(function(t){ contested[t] = true; });
 
   var divs = {};
-  ctx.members.forEach(function(t){ (divs[ctx.rec[t].division || ""] = divs[ctx.rec[t].division || ""] || []).push(t); });
+  ctx.members.forEach(function(t){
+    var d = ctx.rec[t].division || "";
+    (divs[d] = divs[d] || []).push(t);
+  });
   var keys = Object.keys(divs).sort();
 
   var out = "";
   keys.forEach(function(d){
     if (d) out += '<div class="divhd">' + esc(d) + " Division</div>";
+
     var rows = divs[d].slice().sort(function(a,b){
-      var A = ctx.rec[a], B = ctx.rec[b];
-      return B.cpct - A.cpct || B.cw - A.cw || B.pct - A.pct || a.localeCompare(b);
+      var sa = seatOf(a), sb = seatOf(b);
+      if (sa !== sb) return sa - sb;
+      return ctx.rec[b].cpct - ctx.rec[a].cpct || a.localeCompare(b);
     });
+
+    // How many teams from each unresolved tier sit in this division.
+    var share = {};
+    rows.forEach(function(t){ share[tierOf[t]] = (share[tierOf[t]] || 0) + 1; });
+
     out += '<table><thead><tr><th class="pos"></th><th>Team</th><th class="num">Conf</th>' +
            '<th class="num">Pct</th><th class="num">Overall</th></tr></thead><tbody>';
-    rows.forEach(function(t,i){
+
+    var rank = 0, prevTier = null;
+    rows.forEach(function(t, i){
+      if (tierOf[t] !== prevTier){ rank = i + 1; prevTier = tierOf[t]; }
       var r = ctx.rec[t];
+      var tied = share[tierOf[t]] > 1;
       var cls = inGame[t] ? "berth" : (contested[t] ? "contest" : "");
-      out += '<tr class="' + cls + '"><td class="pos">' + (i+1) + "</td>" +
+      out += '<tr class="' + cls + '"><td class="pos">' + (tied ? "T" : "") + rank + "</td>" +
              '<td class="tm">' + esc(t) +
              (inGame[t] ? ' <span class="tag ok">title game</span>' : "") +
-             (contested[t] ? ' <span class="tag stop">contested</span>' : "") + "</td>" +
+             (contested[t] ? ' <span class="tag stop">contested</span>' : "") +
+             (tied && !contested[t] ? ' <span class="tag tie">unbroken tie</span>' : "") + "</td>" +
              '<td class="num">' + r.cw + "&ndash;" + r.cl + "</td>" +
              '<td class="num">' + fmtPct(r.cpct) + "</td>" +
              '<td class="num">' + r.w + "&ndash;" + r.l + "</td></tr>";

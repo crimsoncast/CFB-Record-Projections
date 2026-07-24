@@ -513,7 +513,9 @@
 
       if (s.blocked) {
         trace.push({ step: s.label, teams: group.slice(), outcome: "blocked", needs: s.needs });
-        return { tiers: [group.slice()], needs: s.needs };
+        var stalled = group.slice();
+        stalled.needs = s.needs;
+        return { tiers: [stalled], needs: s.needs };
       }
 
       var buckets = s.fn(group, ctx);
@@ -539,7 +541,9 @@
       return { tiers: tiers, needs: needs };
     }
 
-    return { tiers: [group.slice()], needs: "all steps exhausted" };
+    var exhausted = group.slice();
+    exhausted.needs = "all steps exhausted";
+    return { tiers: [exhausted], needs: exhausted.needs };
   }
 
   /**
@@ -577,9 +581,9 @@
         participants = participants.concat(tier);
         // A tier of two filling the last two slots settles who plays but not
         // who hosts.
-        if (tier.length > 1) seedingBlocked = { needs: needs, teams: tier.slice() };
+        if (tier.length > 1) seedingBlocked = { needs: tier.needs || needs, teams: tier.slice() };
       } else {
-        blocked = { needs: needs, contested: tier.slice(), slots: room };
+        blocked = { needs: tier.needs || needs, contested: tier.slice(), slots: room };
         break;
       }
     }
