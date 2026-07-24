@@ -81,15 +81,31 @@ schedules aren't uniform — the ACC in 2026 has twelve teams playing nine leagu
 games and five playing eight. Teams level on percentage may therefore show
 different win-loss records, and the tie flag lists each team's own record.
 
-## Status
+## Tiebreakers
 
-Records, standings, and tie detection work. Ties are flagged with the
-head-to-head results among the tied teams, which is step one of every
-conference's procedure.
+`tiebreakers.js` implements the published championship-game procedure for nine
+conferences; `context.js` turns a season plus your picks into what it consumes.
+Each step that can be derived from wins and losses is applied in the order the
+conference specifies, and any separation restarts the procedure for the
+resulting groups, as the documents require.
 
-The full tiebreaker engine is not built yet. When it is, it will resolve each
-step it can from the projected results and stop at an explicit "needs external
-input" state for the steps that can't be derived from wins and losses —
-proprietary analytics rankings, scoring-margin comparisons, and random draws.
+Steps that need something a projection cannot supply — CFP rankings, SportSource
+Analytics ratings, scoring margins, coin tosses — stop the engine, which then
+reports what it would need. Naming the participants and seeding them are treated
+as separate questions: two teams level for the last two places both play, and
+only the host is left open.
+
+The Pac-12 is not implemented. It may rewrite its final week of conference
+matchups based on the standings, so those games are flagged as provisional in
+the schedule rather than treated as fixed.
+
+### Validation
+
+    node test-sec-examples.js              # 20 unit tests, including the SEC's own examples
+    node scripts/validate.mjs 2024 2025    # replay finished seasons against real title games
+
+The replay is the meaningful one. It reproduces 14 of the 18 championship
+matchups from 2024 and 2025 exactly; the other four stop at a CFP ranking or an
+analytics rating, with the teams that actually played still in contention.
 
 Data from [CollegeFootballData.com](https://collegefootballdata.com).
