@@ -118,9 +118,6 @@ async function fetchSeason(year) {
   const allRegular = rawRegular.map(normalizeGame).filter((g) => g.id && g.home && g.away);
   const allPost = rawPost.map(normalizeGame).filter((g) => g.id && g.home && g.away);
 
-  const games = allRegular.filter((g) => involvesFBS(g, fbs));
-  games.sort((a, b) => (a.week - b.week) || String(a.startDate).localeCompare(String(b.startDate)));
-
   /* Keep at most one championship per conference; the first match wins. */
   const seenConf = new Set();
   const championships = [...allRegular, ...allPost]
@@ -130,6 +127,15 @@ async function fetchSeason(year) {
       seenConf.add(g.homeConf);
       return true;
     });
+
+  /* Championship games carry seasonType "regular", so they arrive looking like
+     ordinary week 15 league games. They are held separately and excluded here:
+     counting one inflates the winner's conference record and charges the loser
+     with a loss they did not have when the field was set. The title game is the
+     output of the standings, not an input to them. */
+  const titleIds = new Set(championships.map((g) => g.id));
+  const games = allRegular.filter((g) => involvesFBS(g, fbs) && !titleIds.has(g.id));
+  games.sort((a, b) => (a.week - b.week) || String(a.startDate).localeCompare(String(b.startDate)));
 
   const played = games.filter((g) => g.completed).length;
   const dropped = allRegular.length - games.length;
