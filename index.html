@@ -98,6 +98,7 @@ main{padding:20px;max-width:1400px}
 .mark{display:flex;align-items:center;justify-content:flex-end;padding-right:4px;gap:6px}
 .pip{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim)}
 .pip.f{color:var(--final)}
+.pip.prov{color:var(--lamp);opacity:.8}
 .nonfbs{opacity:.55}
 
 table{border-collapse:collapse;width:100%;max-width:820px}
@@ -116,11 +117,33 @@ tbody tr:hover{background:#1A2C33}
 .conf-hd h2{margin:0;font-size:21px;text-transform:uppercase;letter-spacing:.06em}
 .conf-hd .meta{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim)}
 
-.tie{border-left:2px solid var(--flag);background:#2A1D1A66;padding:8px 12px;margin:6px 0 10px;max-width:820px;font-size:13px}
-.tie .lbl{font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.12em;
-  font-size:12px;color:var(--flag);display:block;margin-bottom:3px}
-.tie .h2h{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--chalk);margin:2px 0}
-.tie .note{color:var(--dim);font-size:12px;margin-top:5px}
+.verdict{border-left:2px solid var(--line);padding:8px 12px;margin:0 0 10px;max-width:820px;font-size:13px;background:#16262C66}
+.verdict .lbl{font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.12em;
+  font-size:12px;display:block;margin-bottom:3px;color:var(--dim)}
+.verdict .who{font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--chalk);line-height:1.2}
+.verdict .note{color:var(--dim);font-size:12px;margin-top:5px}
+.verdict.ok{border-left-color:var(--final)}
+.verdict.ok .lbl{color:var(--final)}
+.verdict.stop{border-left-color:var(--flag);background:#2A1D1A55}
+.verdict.stop .lbl{color:var(--flag)}
+.verdict.none{border-left-color:var(--dim)}
+
+.divhd{font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.14em;
+  font-size:12px;color:var(--lamp);margin:12px 0 4px}
+.tag{font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;
+  padding:1px 5px;border-radius:2px;vertical-align:middle;margin-left:5px}
+.tag.ok{background:#1F3B38;color:var(--final)}
+.tag.stop{background:#2E211C;color:var(--flag)}
+tr.contest td{background:#241C1A}
+
+details.trace{max-width:820px;margin:8px 0 0;font-size:12px}
+details.trace summary{cursor:pointer;color:var(--dim);font-family:'Barlow Condensed',sans-serif;
+  text-transform:uppercase;letter-spacing:.1em;padding:4px 0}
+details.trace summary:hover{color:var(--lamp)}
+.tstep{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:3px 0;border-bottom:1px solid #1E3138}
+.tname{color:var(--chalk)}
+.tteams,.tout{color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px}
+@media (max-width:720px){.tstep{grid-template-columns:1fr}}
 
 .hint{color:var(--dim);font-size:13px;max-width:660px;margin:0 0 16px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
@@ -180,6 +203,9 @@ tbody tr:hover{background:#1A2C33}
 
 <div class="toast" id="toast" hidden></div>
 
+<script src="tiebreakers.js"></script>
+<script src="context.js"></script>
+
 <script>
 (function(){
 "use strict";
@@ -189,6 +215,8 @@ var LS = { picks: function(y){ return "fbsboard.picks." + y; } };
 var S = {
   year: null,
   manifest: null,
+  season: null,
+  lastConfWeek: 0,
   teams: [],
   games: [],
   picks: {},
@@ -233,6 +261,7 @@ function loadSeason(year){
 function hydrate(season){
   S.year = season.year;
   S.teams = season.teams || [];
+  S.season = season;
   S.games = season.games || [];
   S.generated = season.generated;
   S.fbs = new Set();
@@ -246,6 +275,7 @@ function hydrate(season){
   document.getElementById("yrLabel").textContent = S.year;
   document.getElementById("year").value = String(S.year);
   document.getElementById("asof").textContent = S.generated ? "Data as of " + shortDate(S.generated) : "";
+  S.lastConfWeek = S.games.reduce(function(m,g){ return g.confGame && g.week > m ? g.week : m; }, 0);
   buildConfFilter();
   renderAll();
 }
@@ -374,10 +404,19 @@ function sideCell(g, side){
          '<span class="cf">' + esc(conf) + "</span></" + tag + ">";
 }
 
+/* The Pac-12 can rewrite its final week of conference matchups based on the
+   standings, so those pairings are provisional rather than scheduled. */
+function isProvisional(g){
+  if (S.conf[g.home] !== "Pac-12" || S.conf[g.away] !== "Pac-12") return false;
+  return g.week >= S.lastConfWeek;
+}
+
 function gameRow(g){
   var mark = "";
   if (isFinal(g)) mark = '<span class="pip f">' + g.awayPts + "&ndash;" + g.homePts + "</span>";
   else if (countsAsConference(g)) mark = '<span class="pip">CONF</span>';
+  // Appended, not assigned: a provisional game is also a conference game.
+  if (isProvisional(g)) mark += '<span class="pip prov">FLEX</span>';
   return '<div class="game">' + sideCell(g,"away") +
          '<span class="at">' + (g.neutral ? "vs" : "@") + "</span>" +
          sideCell(g,"home") + '<span class="mark">' + mark + "</span></div>";
@@ -385,68 +424,108 @@ function gameRow(g){
 
 function renderStandings(){
   var host = document.getElementById("pane-standings");
-  var rec = computeRecords();
-  var byConf = {};
-  Object.keys(rec).forEach(function(k){
-    var r = rec[k];
-    if (!r.conf || r.conf === "Independent") return;
-    (byConf[r.conf] = byConf[r.conf] || []).push(r);
-  });
+  if (!window.Tiebreakers || !window.SeasonContext){
+    host.innerHTML = '<div class="empty err"><h2>Engine not loaded</h2>' +
+      "<p>tiebreakers.js and context.js must sit next to index.html.</p></div>";
+    return;
+  }
+
+  var contexts = SeasonContext.buildSeasonContexts(S.season, S.picks, Tiebreakers);
   var only = activeConf();
-  var names = Object.keys(byConf).sort().filter(function(c){ return !only || c === only; });
+  var names = Object.keys(contexts).sort().filter(function(c){ return !only || c === only; });
   if (!names.length){ host.innerHTML = '<div class="empty"><h2>No conferences to show</h2></div>'; return; }
 
-  var html = '<p class="hint">Sorted by conference win percentage. Teams level on percentage are flagged, ' +
-             "and head-to-head results among them are shown &mdash; that's step one of every conference procedure. " +
-             "The full tiebreaker engine isn't wired up yet.</p>";
+  var html = '<p class="hint">Each conference is run through its own published tiebreaker procedure. ' +
+             "Where a procedure calls for something a projection can't supply &mdash; a CFP ranking, an " +
+             "analytics rating, a coin toss &mdash; the board says so rather than guessing.</p>";
 
   names.forEach(function(cname){
-    var rows = byConf[cname].slice().sort(function(a,b){
-      return b.cpct - a.cpct || b.cw - a.cw || b.pct - a.pct || a.team.localeCompare(b.team);
-    });
-    html += '<div class="conf-block"><div class="conf-hd"><h2>' + esc(cname) + "</h2>" +
-            '<span class="meta">' + rows.length + " teams</span></div>" +
-            '<table><thead><tr><th class="pos"></th><th>Team</th><th class="num">Conf</th>' +
-            '<th class="num">Pct</th><th class="num">Overall</th></tr></thead><tbody>';
-    rows.forEach(function(r,i){
-      html += '<tr class="' + (i < 2 ? "berth" : "") + '"><td class="pos">' + (i+1) + "</td>" +
-              '<td class="tm">' + esc(r.team) + "</td>" +
-              '<td class="num">' + r.cw + "&ndash;" + r.cl + "</td>" +
-              '<td class="num">' + fmtPct(r.cpct) + "</td>" +
-              '<td class="num">' + r.w + "&ndash;" + r.l + "</td></tr>";
-    });
-    html += "</tbody></table>" + tieFlags(rows) + "</div>";
+    var ctx = contexts[cname];
+    var res = SeasonContext.resolveWithDivisions(ctx, Tiebreakers);
+    var hasRules = !!Tiebreakers.RULES[cname];
+    html += '<div class="conf-block">' + verdict(cname, ctx, res, hasRules) +
+            standingsTable(ctx, res) + traceBlock(res) + "</div>";
   });
   host.innerHTML = html;
 }
 
-function tieFlags(rows){
-  var out = "", i = 0;
-  while (i < rows.length){
-    var j = i;
-    while (j + 1 < rows.length && Math.abs(rows[j+1].cpct - rows[i].cpct) < 1e-9) j++;
-    if (j > i && (rows[i].cw + rows[i].cl) > 0){
-      var group = rows.slice(i, j+1);
-      out += '<div class="tie"><span class="lbl">' +
-             (i < 2 ? "Tie affects the title game" : "Tie at position " + (i+1)) + "</span>" +
-             "<div>" + group.map(function(r){
-               return esc(r.team) + " " + r.cw + "&ndash;" + r.cl;
-             }).join(", ") + " &mdash; all at " + fmtPct(group[0].cpct) + " in league play</div>";
-      for (var a = 0; a < group.length; a++){
-        for (var b = a+1; b < group.length; b++){
-          var x = group[a], y = group[b], line;
-          if (x.beat[y.team]) line = x.team + " beat " + y.team;
-          else if (y.beat[x.team]) line = y.team + " beat " + x.team;
-          else line = x.team + " and " + y.team + " did not meet";
-          out += '<div class="h2h">' + esc(line) + "</div>";
-        }
-      }
-      out += '<div class="note">Beyond head-to-head, the conference\'s written procedure decides. ' +
-             "Several leagues end in a proprietary analytics ranking or a random draw, which no projection can resolve.</div></div>";
-    }
-    i = j + 1;
+/* The headline for a conference: who plays, or precisely what is missing. */
+function verdict(cname, ctx, res, hasRules){
+  var h = '<div class="conf-hd"><h2>' + esc(cname) + "</h2>" +
+          '<span class="meta">' + ctx.members.length + " teams</span></div>";
+
+  if (!hasRules){
+    return h + '<div class="verdict none"><span class="lbl">Tiebreakers not loaded</span>' +
+           "<div>Standings only. This conference's procedure isn't implemented.</div></div>";
   }
+  if (res.participants.length === 2){
+    return h + '<div class="verdict ok"><span class="lbl">Championship game</span>' +
+           '<div class="who">' + esc(res.participants[0]) + " vs " + esc(res.participants[1]) + "</div>" +
+           (res.seedingBlocked
+             ? '<div class="note">Both teams are in. Seeding is unresolved &mdash; needs ' +
+               esc(res.seedingBlocked.needs || "an outside input") + ".</div>"
+             : "") + "</div>";
+  }
+  var c = res.blocked || {};
+  return h + '<div class="verdict stop"><span class="lbl">Undecided</span>' +
+         (res.participants.length
+            ? '<div class="who">' + esc(res.participants.join(" + ")) + " through</div>"
+            : "") +
+         '<div>Contested: ' + esc((c.contested || []).join(", ")) +
+         (c.slots ? " &mdash; for " + c.slots + " place" + (c.slots > 1 ? "s" : "") : "") + "</div>" +
+         '<div class="note">Needs ' + esc(c.needs || "an outside input") +
+         ", which a projection can't supply.</div></div>";
+}
+
+function standingsTable(ctx, res){
+  var inGame = {}, contested = {};
+  res.participants.forEach(function(t){ inGame[t] = true; });
+  if (res.blocked) (res.blocked.contested || []).forEach(function(t){ contested[t] = true; });
+
+  var divs = {};
+  ctx.members.forEach(function(t){ (divs[ctx.rec[t].division || ""] = divs[ctx.rec[t].division || ""] || []).push(t); });
+  var keys = Object.keys(divs).sort();
+
+  var out = "";
+  keys.forEach(function(d){
+    if (d) out += '<div class="divhd">' + esc(d) + " Division</div>";
+    var rows = divs[d].slice().sort(function(a,b){
+      var A = ctx.rec[a], B = ctx.rec[b];
+      return B.cpct - A.cpct || B.cw - A.cw || B.pct - A.pct || a.localeCompare(b);
+    });
+    out += '<table><thead><tr><th class="pos"></th><th>Team</th><th class="num">Conf</th>' +
+           '<th class="num">Pct</th><th class="num">Overall</th></tr></thead><tbody>';
+    rows.forEach(function(t,i){
+      var r = ctx.rec[t];
+      var cls = inGame[t] ? "berth" : (contested[t] ? "contest" : "");
+      out += '<tr class="' + cls + '"><td class="pos">' + (i+1) + "</td>" +
+             '<td class="tm">' + esc(t) +
+             (inGame[t] ? ' <span class="tag ok">title game</span>' : "") +
+             (contested[t] ? ' <span class="tag stop">contested</span>' : "") + "</td>" +
+             '<td class="num">' + r.cw + "&ndash;" + r.cl + "</td>" +
+             '<td class="num">' + fmtPct(r.cpct) + "</td>" +
+             '<td class="num">' + r.w + "&ndash;" + r.l + "</td></tr>";
+    });
+    out += "</tbody></table>";
+  });
   return out;
+}
+
+/* The decision path, collapsed. Only steps that actually moved something. */
+function traceBlock(res){
+  var useful = (res.trace || []).filter(function(t){
+    return t.outcome === "separated" || t.outcome === "blocked";
+  });
+  if (!useful.length) return "";
+  var rows = useful.map(function(t){
+    var detail = t.outcome === "blocked"
+      ? "stopped &mdash; needs " + esc(t.needs)
+      : (t.result || []).map(function(b){ return esc(b.join("+")); }).join(" &gt; ");
+    return '<div class="tstep"><span class="tname">' + esc(t.step) + "</span>" +
+           '<span class="tteams">' + esc(t.teams.join(", ")) + "</span>" +
+           '<span class="tout">' + detail + "</span></div>";
+  }).join("");
+  return "<details class=\"trace\"><summary>How this was decided (" + useful.length + " steps)</summary>" + rows + "</details>";
 }
 
 function renderTeams(){
